@@ -2,8 +2,6 @@
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-00aeec)](manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Edge 扩展](https://img.shields.io/badge/Edge-可加载-0078D7)](#安装)
-[![Chrome 扩展](https://img.shields.io/badge/Chrome-可加载-yellow)](#安装)
 
 > 看网课的时候，推荐、广告、评论、导航栏总在抢注意力。
 > 这个扩展在 B 站视频页右下角放一个按钮，**点一下，页面只剩标题、播放器和视频选集**。
@@ -28,7 +26,6 @@
 - [自定义隐藏规则](#自定义隐藏规则)
 - [工作原理](#工作原理)
 - [文件结构](#文件结构)
-- [发布与上架](#发布与上架)
 - [隐私](#隐私)
 - [边界与说明](#边界与说明)
 - [License](#license)
@@ -37,21 +34,17 @@
 
 ## 安装
 
-### 方式一：下载安装包（推荐）
-
-1. 打开仓库右侧 **Releases**，下载最新版 `bilibili-focus-x.y.z-edge.zip`
-2. 解压到**固定目录**，例如 `D:\Extensions\bilibili-focus`（不要放临时目录，扩展运行时会一直读这个文件夹）
-3. 打开 `edge://extensions/` → 打开左下角 **开发人员模式** → 点 **加载解压缩的扩展**
-4. 选择解压出来的文件夹，**里面能直接看到 `manifest.json` 的那一层**
-5. 打开任意 B 站视频页，右下角出现「专注模式」按钮即安装成功
-
-### 方式二：从源码安装
+### 从源码加载（开发模式）
 
 ```bash
 git clone https://github.com/Hayahana/bilibili-focus.git
 ```
 
-然后按上面第 3–4 步，加载克隆下来的 `bilibili-focus` 文件夹。
+1. 打开 `edge://extensions/`，打开左下角 **开发人员模式**
+2. 点 **加载解压缩的扩展**，选择克隆下来的 `bilibili-focus` 文件夹，**里面能直接看到 `manifest.json` 的那一层**
+3. 打开任意 B 站视频页，右下角出现「专注模式」按钮即安装成功
+
+文件夹建议放在固定目录（例如 `D:\Extensions\bilibili-focus`），不要放临时目录，扩展运行时会一直读这个文件夹。
 
 Chrome 完全一样：`chrome://extensions/` → 开发者模式 → 加载已解压的扩展程序。
 
@@ -137,22 +130,10 @@ bilibili-focus/
 │  ├─ content.js        # 悬浮按钮、设置面板、点选删除
 │  ├─ focus.css         # 全部隐藏规则
 │  └─ background.js     # 点工具栏图标 → 通知当前页切换
-├─ dist/                # 打包产物（上架用 zip、商店 Logo）
-├─ store/listing.md     # Edge 商店表单文案
 ├─ tools/make_icons.py  # 图标生成脚本
-├─ PUBLISH.md           # 发布 / 上架指南
 ├─ PRIVACY.md           # 隐私政策
 └─ README.md
 ```
-
----
-
-## 发布与上架
-
-- **GitHub**：仓库即发布页，打 Release 时附上 `dist/bilibili-focus-1.0.0-edge.zip`
-- **Microsoft Edge 加载项**：步骤见 [PUBLISH.md](PUBLISH.md)，表单文案见 [store/listing.md](store/listing.md)
-- 上架用包要求 `manifest.json` 在压缩包**根目录**，`dist/bilibili-focus-1.0.0-edge.zip` 已符合
-- 更新时记得把 `manifest.json` 的 `version` 递增，否则会被商店拒收
 
 ---
 
