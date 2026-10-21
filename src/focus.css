@@ -1,0 +1,129 @@
+/* =====================================================================
+   B站专注模式 · 隐藏规则
+   所有规则都以 html.bfm-on 开头，所以只要不加这个 class，页面完全不变。
+   用 display:none 而不是真的删除节点，B 站重新渲染（切 P、翻页、无限滚动）
+   之后依然生效，也随时可以一键恢复。
+   ===================================================================== */
+
+/* ---------- 1. 顶部导航 / 搜索栏 ---------- */
+html.bfm-on.bfm-h-header #biliMainHeader,
+html.bfm-on.bfm-h-header .bili-header,
+html.bfm-on.bfm-h-header .mini-header,
+html.bfm-on.bfm-h-header #bilibili-header {
+  display: none !important;
+}
+
+/* ---------- 2. 右侧推荐（故意保留“视频选集”，方便接着看下一讲） ---------- */
+html.bfm-on.bfm-h-right .up-panel-container,
+html.bfm-on.bfm-h-right .up-info-container,
+html.bfm-on.bfm-h-right .recommend-list-v1,
+html.bfm-on.bfm-h-right .rec-list,
+html.bfm-on.bfm-h-right .rec-footer,
+html.bfm-on.bfm-h-right .video-page-card-small,
+html.bfm-on.bfm-h-right .right-bottom-banner {
+  display: none !important;
+}
+
+/* ---------- 3. 广告位（左侧横幅 / 播放器下方 / 右下角 / 贴片） ---------- */
+html.bfm-on.bfm-h-ads .ad-report,
+html.bfm-on.bfm-h-ads .ad-floor-exp,
+html.bfm-on.bfm-h-ads .left-banner,
+html.bfm-on.bfm-h-ads .right-bottom-banner,
+html.bfm-on.bfm-h-ads .strip-ad,
+html.bfm-on.bfm-h-ads #slide_ad,
+html.bfm-on.bfm-h-ads .slide-ad-exp,
+html.bfm-on.bfm-h-ads .gg-pic,
+html.bfm-on.bfm-h-ads #reco_list,
+html.bfm-on.bfm-h-ads .bili-video-card.is-rcmd {
+  display: none !important;
+}
+
+/* ---------- 4. 评论区 ---------- */
+html.bfm-on.bfm-h-comments #commentapp,
+html.bfm-on.bfm-h-comments .comment-container,
+html.bfm-on.bfm-h-comments #comment,
+html.bfm-on.bfm-h-comments .reply-list {
+  display: none !important;
+}
+
+/* ---------- 5. 标签 ---------- */
+html.bfm-on.bfm-h-tags .video-tag-container {
+  display: none !important;
+}
+
+/* ---------- 6. 视频简介 ---------- */
+html.bfm-on.bfm-h-desc #v_desc,
+html.bfm-on.bfm-h-desc .video-desc-container {
+  display: none !important;
+}
+
+/* ---------- 7. 弹幕输入框 / 弹幕列表 ---------- */
+html.bfm-on.bfm-h-danmaku #danmukuBox,
+html.bfm-on.bfm-h-danmaku .danmaku-box,
+html.bfm-on.bfm-h-danmaku .danmaku-wrap {
+  display: none !important;
+}
+
+/* ---------- 8. 视频选集 / 分 P 列表 ---------- */
+html.bfm-on.bfm-h-pod .video-pod,
+html.bfm-on.bfm-h-pod .video-pod__list {
+  display: none !important;
+}
+
+/* ---------- 9. 点赞 / 投币 / 收藏 / 分享工具栏 ---------- */
+html.bfm-on.bfm-h-toolbar #arc_toolbar_report,
+html.bfm-on.bfm-h-toolbar .video-toolbar-container {
+  display: none !important;
+}
+
+/* ---------- 10. 右侧悬浮按钮（客服、返回顶部、小窗） ---------- */
+html.bfm-on.bfm-h-sidenav .fixed-sidenav-storage,
+html.bfm-on.bfm-h-sidenav .back-to-top-wrap {
+  display: none !important;
+}
+
+/* ---------- 11. 播放器旁的“课程总结 / AI 总结”侧栏 ---------- */
+html.bfm-on .video-note-sidebar-panel,
+html.bfm-on .video-note-sidebar-chapter-portal,
+html.bfm-on .continuous-play,
+html.bfm-on .bpx-player-ending-related {
+  display: none !important;
+}
+
+/* =====================================================================
+   宽屏：把右栏腾出来的空间给播放器
+   B 站会用 <style id="setSizeStyle"> 写死 .left-container / #bilibili-player
+   的宽高，这里用 !important 覆盖；切换后 JS 会补发一次 resize，
+   让播放器重新量一次容器尺寸。
+   ===================================================================== */
+/* 宽屏时整条右栏（含选集）让位给播放器 */
+html.bfm-on.bfm-wide .right-container {
+  display: none !important;
+}
+
+html.bfm-on.bfm-wide .video-container-v1 {
+  display: block !important;
+}
+
+html.bfm-on.bfm-wide .left-container {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+}
+
+html.bfm-on.bfm-wide #playerWrap,
+html.bfm-on.bfm-wide #bilibili-player-placeholder {
+  height: auto !important;
+}
+
+html.bfm-on.bfm-wide #bilibili-player {
+  width: min(100%, max(720px, calc((100vh - 190px) * 16 / 9))) !important;
+  height: auto !important;
+  aspect-ratio: 16 / 9 !important;
+  margin: 0 auto !important;
+}
+
+/* 宽屏时给标题区一点呼吸空间 */
+html.bfm-on.bfm-wide .video-info-container {
+  padding-top: 12px !important;
+}
