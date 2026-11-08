@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B站专注模式 · Bilibili Focus",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "一键隐藏 B 站视频页的推荐流、广告、评论等干扰内容，只留课程与播放器；支持点选删除任意元素。",
   "minimum_chrome_version": "102",
   "icons": {
@@ -9,11 +9,15 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "permissions": ["storage"],
   "action": {
-    "default_title": "切换 B站专注模式"
-  },
-  "background": {
-    "service_worker": "src/background.js"
+    "default_title": "B站专注模式设置",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "content_scripts": [
     {

@@ -1,8 +1,8 @@
 /* =====================================================================
-   B站专注模式 · 页面内 UI
-   - 右下角悬浮按钮：一键开关
-   - 齿轮：逐项选择要隐藏的模块 / 点选删除任意元素
-   - 状态写在 localStorage，刷新后保留，且能在首屏前生效（见 early.js）
+   B站专注模式 · 页面内 UI（v1.1）
+   - 悬浮按钮可拖动、可调不透明度、可整体隐藏
+   - 设置面板与工具栏弹窗共用 chrome.storage.local，实时同步
+   - 状态同时镜像到 localStorage，供 early.js 在首屏前同步读取
    ===================================================================== */
 (() => {
   'use strict';
@@ -34,32 +34,69 @@
     ['pod', '视频选集'],
     ['toolbar', '点赞收藏栏'],
   ];
+  const DEFAULT_DOCK = { show: true, x: null, y: null, opacity: 0.92 };
   // 这些元素一旦被隐藏，页面基本就废了，直接拒绝
   const PROTECTED = 'html, body, #app, #mirror-vdcon, #playerWrap, #bilibili-player, video';
 
-  function loadState() {
-    let raw = null;
-    try {
-      raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-    } catch (e) {
-      raw = null;
-    }
+  const hasExtStorage = !!(window.chrome && chrome.storage && chrome.storage.local);
+
+  /* ------------------------------------------------------------------ */
+  /* 状态                                                                */
+  /* ------------------------------------------------------------------ */
+
+  function normalize(raw) {
     const s = raw && typeof raw === 'object' ? raw : {};
+    const hide = Object.assign({}, DEFAULT_HIDE, s.hide && typeof s.hide === 'object' ? s.hide : {});
+    const d = s.dock && typeof s.dock === 'object' ? s.dock : {};
+    const opacity = Number(d.opacity);
     return {
       on: !!s.on,
       wide: s.wide === true,
-      hide: Object.assign({}, DEFAULT_HIDE, s.hide && typeof s.hide === 'object' ? s.hide : {}),
+      hide,
       custom: Array.isArray(s.custom) ? s.custom.filter((x) => typeof x === 'string') : [],
+      dock: {
+        show: d.show !== false,
+        x: Number.isFinite(Number(d.x)) && d.x !== null ? Math.round(Number(d.x)) : null,
+        y: Number.isFinite(Number(d.y)) && d.y !== null ? Math.round(Number(d.y)) : null,
+        opacity: Number.isFinite(opacity) ? Math.min(1, Math.max(0.1, opacity)) : DEFAULT_DOCK.opacity,
+      },
     };
   }
 
-  const state = loadState();
+  function readMirror() {
+    try {
+      return JSON.parse(localStorage.getItem(KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
 
-  function save() {
+  function writeMirror() {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
-      /* 隐私模式下可能写不进去，功能仍可用，只是不记忆 */
+      /* 隐私模式可能写不进去 */
+    }
+  }
+
+  let state = normalize(readMirror());
+
+  function persist() {
+    writeMirror();
+    if (hasExtStorage) {
+      try {
+        chrome.storage.local.set({ [KEY]: state });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }
+
+  function sameState(a, b) {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (e) {
+      return false;
     }
   }
 
@@ -87,6 +124,15 @@
     }
     h.classList.toggle('bfm-wide', state.on && state.wide);
     applyCustom();
+    // 悬浮按钮外观
+    if (dock) {
+      dock.style.setProperty('--bfm-op', String(state.dock.opacity));
+      dock.classList.toggle('is-hidden', !state.dock.show);
+      if (!state.dock.show) {
+        panel.hidden = true;
+        picking && exitPick();
+      }
+    }
     syncUI();
   }
 
@@ -285,7 +331,7 @@
     }
     state.custom.push(sel);
     if (!state.on) state.on = true;
-    save();
+    persist();
     apply();
     nudgeLayout();
     toast('已隐藏：' + sel);
@@ -306,22 +352,31 @@
       :host { all: initial; }
       * { box-sizing: border-box; }
       .dock {
-        position: fixed; right: 18px; bottom: 92px;
+        position: fixed; left: 0; top: 0;
         display: flex; gap: 8px; align-items: center;
         pointer-events: auto;
+        z-index: 2;
+        opacity: var(--bfm-op, .92);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
         font: 13px/1.4 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        transition: opacity .18s ease;
       }
+      .dock:hover { opacity: 1; }
+      .dock.dragging { cursor: grabbing; opacity: 1; }
+      .dock.is-hidden { display: none !important; }
       button { font: inherit; cursor: pointer; border: 0; }
       .main {
         display: flex; align-items: center; gap: 7px;
         height: 38px; padding: 0 15px; border-radius: 19px;
-        color: #fff; background: rgba(28, 29, 32, .9);
+        color: #fff; background: rgba(28, 29, 32, .92);
         border: 1px solid rgba(255, 255, 255, .16);
         box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
         backdrop-filter: blur(8px);
-        transition: background .18s ease, transform .18s ease;
+        transition: background .18s ease;
       }
-      .main:hover { transform: translateY(-1px); }
+      .main:active { transform: scale(.98); }
       .main .dot {
         width: 8px; height: 8px; border-radius: 50%;
         background: #8a8f99; transition: background .18s ease, box-shadow .18s ease;
@@ -331,14 +386,15 @@
       .cog {
         width: 32px; height: 32px; border-radius: 50%;
         display: grid; place-items: center;
-        color: #dfe3e8; background: rgba(28, 29, 32, .9);
+        color: #dfe3e8; background: rgba(28, 29, 32, .92);
         border: 1px solid rgba(255, 255, 255, .14);
         box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
       }
       .cog:hover { background: rgba(52, 55, 62, .95); }
       .panel {
-        position: fixed; right: 18px; bottom: 140px; width: 308px;
+        position: fixed; left: 0; top: 0; width: 308px;
         max-height: min(72vh, 640px); overflow: auto;
+        z-index: 1;
         padding: 14px; border-radius: 14px;
         color: #e8eaed; background: rgba(24, 25, 28, .97);
         border: 1px solid rgba(255, 255, 255, .12);
@@ -356,7 +412,11 @@
         user-select: none;
       }
       .row:hover { background: rgba(255, 255, 255, .06); }
-      .row input { accent-color: #00aeec; width: 15px; height: 15px; margin: 0; }
+      .row input[type="checkbox"] { accent-color: #00aeec; width: 15px; height: 15px; margin: 0; }
+      .row.slider-row { cursor: default; gap: 8px; }
+      .row.slider-row span { color: #b9c0c8; font-size: 12px; white-space: nowrap; }
+      .row.slider-row input[type="range"] { flex: 1; min-width: 0; accent-color: #00aeec; }
+      .row.slider-row b { color: #9aa0a8; font-size: 11px; font-weight: 500; width: 34px; text-align: right; }
       .wide-row { margin-top: 1px; }
       .hr { height: 1px; background: rgba(255, 255, 255, .1); margin: 11px 0; }
       .pick {
@@ -384,11 +444,11 @@
       .rule .del:hover { background: rgba(255, 80, 80, .2); color: #ff6b6b; }
       .empty { color: #767d86; font-size: 12px; padding: 3px 0; }
       .foot { margin-top: 10px; color: #767d86; font-size: 11px; line-height: 1.7; }
-      .reset {
+      .link {
         background: transparent; color: #9aa0a8; font-size: 12px;
-        text-decoration: underline; padding: 0; margin-left: 4px;
+        text-decoration: underline; padding: 0; margin-right: 8px;
       }
-      .reset:hover { color: #e8eaed; }
+      .link:hover { color: #e8eaed; }
       .toast {
         position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
         max-width: 70vw; padding: 8px 14px; border-radius: 9px;
@@ -401,7 +461,7 @@
       }
       .toast.show { opacity: 1; }
     </style>
-    <div class="dock" id="dock">
+    <div class="dock" id="dock" title="按住可拖动">
       <button class="main" id="main" type="button" aria-pressed="false">
         <span class="dot"></span><span id="mainLabel">专注模式</span>
       </button>
@@ -415,12 +475,21 @@
         <input type="checkbox" data-key="wide"><span>宽屏播放器（收起右侧选集栏）</span>
       </label>
       <div class="hr"></div>
+      <div class="row slider-row">
+        <span>不透明度</span>
+        <input type="range" id="opacity" min="10" max="100" step="1">
+        <b id="opacityVal">92%</b>
+      </div>
+      <div class="hr"></div>
       <button class="pick" id="pick" type="button">点选删除页面元素</button>
       <div class="rules" id="rules"></div>
       <div class="hr"></div>
       <div class="foot">
-        快捷键 Alt + Z；点选模式下点哪删哪，Esc 退出。
-        <button class="reset" id="reset" type="button">恢复默认</button>
+        拖动按钮可换位置；更多设置点浏览器工具栏里的扩展图标。
+        <div style="margin-top:6px;">
+          <button class="link" id="hideDock" type="button">隐藏悬浮按钮</button>
+          <button class="link" id="reset" type="button">恢复默认</button>
+        </div>
       </div>
     </div>
     <div class="toast" id="toast"></div>
@@ -435,6 +504,8 @@
   const rulesBox = $('rules');
   const pickBtn = $('pick');
   const toastEl = $('toast');
+  const opacityRange = $('opacity');
+  const opacityVal = $('opacityVal');
   let toastTimer = 0;
 
   function toast(msg) {
@@ -453,7 +524,7 @@
     cb.dataset.key = key;
     cb.addEventListener('change', () => {
       state.hide[key] = cb.checked;
-      save();
+      persist();
       apply();
       nudgeLayout();
     });
@@ -465,7 +536,7 @@
   const wideBox = shadow.querySelector('input[data-key="wide"]');
   wideBox.addEventListener('change', () => {
     state.wide = wideBox.checked;
-    save();
+    persist();
     apply();
     nudgeLayout();
   });
@@ -493,7 +564,7 @@
       del.textContent = '×';
       del.addEventListener('click', () => {
         state.custom = state.custom.filter((s) => s !== sel);
-        save();
+        persist();
         apply();
         nudgeLayout();
         toast('已恢复：' + sel);
@@ -507,12 +578,16 @@
     dock.classList.toggle('on', state.on);
     mainBtn.setAttribute('aria-pressed', String(state.on));
     mainLabel.textContent = state.on ? '专注中' : '专注模式';
-    mainBtn.title = state.on ? '点击关闭专注模式（Alt+Z）' : '点击开启专注模式（Alt+Z）';
+    mainBtn.title = state.on ? '点击关闭专注模式（Alt+Z），按住可拖动' : '点击开启专注模式（Alt+Z），按住可拖动';
 
     shadow.querySelectorAll('input[data-key]').forEach((cb) => {
       const k = cb.dataset.key;
       cb.checked = k === 'wide' ? state.wide : !!state.hide[k];
     });
+
+    const pct = Math.round(state.dock.opacity * 100);
+    opacityRange.value = String(pct);
+    opacityVal.textContent = pct + '%';
 
     pickBtn.classList.toggle('active', picking);
     pickBtn.textContent = picking ? '点选模式：点一下要删除的东西' : '点选删除页面元素';
@@ -521,19 +596,37 @@
 
   function toggleFocus(force) {
     state.on = typeof force === 'boolean' ? force : !state.on;
-    save();
+    persist();
     apply();
     if (!picking) nudgeLayout();
   }
 
   mainBtn.addEventListener('click', () => {
+    if (justDragged) return;
     if (picking) exitPick();
     toggleFocus();
     toast(state.on ? '专注模式已开启' : '已恢复页面');
   });
 
   $('cog').addEventListener('click', () => {
+    if (justDragged) return;
     panel.hidden = !panel.hidden;
+    if (!panel.hidden) positionPanel();
+  });
+
+  let opacitySaveTimer = 0;
+  opacityRange.addEventListener('input', () => {
+    const v = Math.min(100, Math.max(10, Number(opacityRange.value) || 92));
+    state.dock.opacity = v / 100;
+    opacityVal.textContent = v + '%';
+    dock.style.setProperty('--bfm-op', String(v / 100));
+    // 拖动过程中也持续写回，弹窗那边才能实时跟随
+    clearTimeout(opacitySaveTimer);
+    opacitySaveTimer = setTimeout(persist, 120);
+  });
+  opacityRange.addEventListener('change', () => {
+    state.dock.opacity = Math.min(100, Math.max(10, Number(opacityRange.value) || 92)) / 100;
+    persist();
   });
 
   pickBtn.addEventListener('click', () => {
@@ -544,12 +637,20 @@
     panel.hidden = true;
     if (!state.on) {
       state.on = true;
-      save();
+      persist();
       apply();
       nudgeLayout();
       toast('专注模式已开启，现在可以点选元素了');
     }
     enterPick();
+  });
+
+  $('hideDock').addEventListener('click', () => {
+    state.dock.show = false;
+    panel.hidden = true;
+    persist();
+    apply();
+    toast('悬浮按钮已隐藏，可从工具栏的扩展图标里重新打开');
   });
 
   $('reset').addEventListener('click', () => {
@@ -558,11 +659,117 @@
     state.wide = false;
     state.hide = Object.assign({}, DEFAULT_HIDE);
     state.custom = [];
-    save();
+    state.dock = Object.assign({}, DEFAULT_DOCK, { x: null, y: null });
+    persist();
     apply();
+    positionDock();
     nudgeLayout();
     toast('已恢复默认设置');
   });
+
+  /* ------------------------------------------------------------------ */
+  /* 拖动与定位                                                          */
+  /* ------------------------------------------------------------------ */
+
+  let dragState = null;
+  let justDragged = false;
+
+  function clamp(v, min, max) {
+    return Math.min(Math.max(v, min), Math.max(min, max));
+  }
+
+  function setDockPos(left, top) {
+    const r = dock.getBoundingClientRect();
+    const maxLeft = window.innerWidth - r.width - 8;
+    const maxTop = window.innerHeight - r.height - 8;
+    dock.style.left = clamp(left, 8, maxLeft) + 'px';
+    dock.style.top = clamp(top, 8, maxTop) + 'px';
+  }
+
+  function positionDock() {
+    if (!dock) return;
+    const r = dock.getBoundingClientRect();
+    if (state.dock.x == null || state.dock.y == null) {
+      setDockPos(window.innerWidth - r.width - 18, window.innerHeight - r.height - 92);
+    } else {
+      setDockPos(state.dock.x, state.dock.y);
+    }
+    if (!panel.hidden) positionPanel();
+  }
+
+  function positionPanel() {
+    if (panel.hidden) return;
+    const d = dock.getBoundingClientRect();
+    const pw = panel.offsetWidth || 308;
+    const ph = panel.offsetHeight || 420;
+    let left = clamp(d.right - pw, 8, window.innerWidth - pw - 8);
+    let top = d.top - ph - 10;
+    if (top < 8) {
+      top = clamp(d.bottom + 10, 8, window.innerHeight - ph - 8);
+    }
+    // 空间不够时面板可能压住按钮：改放到按钮左侧，保证按钮始终能点
+    const overlap = !(
+      left + pw < d.left ||
+      left > d.right ||
+      top + ph < d.top ||
+      top > d.bottom
+    );
+    if (overlap) {
+      left = clamp(d.left - pw - 10, 8, window.innerWidth - pw - 8);
+      top = clamp(d.top, 8, window.innerHeight - ph - 8);
+    }
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
+
+  // 拖动：不在按钮上做 pointer capture，否则 click 会被重定向到 dock，
+  // 导致「专注模式 / 齿轮」点不动。这里改成在 document 上跟 move/up。
+  function onDragMove(e) {
+    if (!dragState) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    if (!dragState.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+    dragState.moved = true;
+    dock.classList.add('dragging');
+    setDockPos(dragState.left + dx, dragState.top + dy);
+    if (!panel.hidden) positionPanel();
+  }
+
+  function endDrag() {
+    document.removeEventListener('pointermove', onDragMove, true);
+    document.removeEventListener('pointerup', endDrag, true);
+    document.removeEventListener('pointercancel', endDrag, true);
+    if (!dragState) return;
+    const moved = dragState.moved;
+    dragState = null;
+    dock.classList.remove('dragging');
+    if (moved) {
+      const r = dock.getBoundingClientRect();
+      state.dock.x = Math.round(r.left);
+      state.dock.y = Math.round(r.top);
+      persist();
+      justDragged = true;
+      setTimeout(() => {
+        justDragged = false;
+      }, 250);
+    }
+  }
+
+  dock.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const r = dock.getBoundingClientRect();
+    dragState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      left: r.left,
+      top: r.top,
+      moved: false,
+    };
+    document.addEventListener('pointermove', onDragMove, true);
+    document.addEventListener('pointerup', endDrag, true);
+    document.addEventListener('pointercancel', endDrag, true);
+  });
+
 
   // 点击面板外部时收起
   document.addEventListener(
@@ -606,29 +813,87 @@
     true
   );
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === 'bfm:toggle') {
-      if (picking) exitPick();
-      toggleFocus();
-      toast(state.on ? '专注模式已开启' : '已恢复页面');
-    }
+  window.addEventListener('resize', () => {
+    positionDock();
   });
 
-  // 其它标签页改了设置就同步过来
-  window.addEventListener('storage', (e) => {
-    if (e.key !== KEY) return;
-    const next = loadState();
-    state.on = next.on;
-    state.wide = next.wide;
-    state.hide = next.hide;
-    state.custom = next.custom;
-    apply();
-    nudgeLayout();
-  });
+  /* ------------------------------------------------------------------ */
+  /* 与工具栏弹窗同步                                                     */
+  /* ------------------------------------------------------------------ */
+
+  function pullStorage() {
+    if (!hasExtStorage) return;
+    try {
+      chrome.storage.local.get(KEY).then(
+        (res) => {
+          const remote = res && res[KEY];
+          if (!remote) {
+            persist(); // 首次升级：把 localStorage 里的旧设置写进 storage
+            return;
+          }
+          const next = normalize(remote);
+          if (sameState(next, state)) return;
+          state = next;
+          apply();
+          positionDock();
+        },
+        () => {}
+      );
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // 只更新悬浮按钮外观，不重建复选框/规则列表（拖动透明度滑条时会频繁触发）
+  function applyDockVisual() {
+    dock.style.setProperty('--bfm-op', String(state.dock.opacity));
+    dock.classList.toggle('is-hidden', !state.dock.show);
+    dock.classList.toggle('on', state.on);
+    if (!state.dock.show) {
+      panel.hidden = true;
+      if (picking) exitPick();
+    }
+    const pct = Math.round(state.dock.opacity * 100);
+    opacityRange.value = String(pct);
+    opacityVal.textContent = pct + '%';
+  }
+
+  function sameFocus(a, b) {
+    return (
+      a.on === b.on &&
+      a.wide === b.wide &&
+      JSON.stringify(a.hide) === JSON.stringify(b.hide) &&
+      JSON.stringify(a.custom) === JSON.stringify(b.custom)
+    );
+  }
+
+  if (hasExtStorage) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes[KEY]) return;
+      const next = normalize(changes[KEY].newValue);
+      if (sameState(next, state)) return;
+      const onlyDock = sameFocus(next, state);
+      state = next;
+      if (onlyDock) {
+        applyDockVisual();
+        positionDock();
+      } else {
+        apply();
+        positionDock();
+      }
+      writeMirror();
+    });
+  }
 
   apply();
+  requestAnimationFrame(() => {
+    positionDock();
+    pullStorage();
+  });
+
   // B 站是 SPA，首屏之后还会挂载播放器/推荐；等一会儿再修一次布局
   window.addEventListener('load', () => {
+    positionDock();
     if (state.on) setTimeout(nudgeLayout, 800);
   });
 })();
